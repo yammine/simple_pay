@@ -22,6 +22,19 @@ config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
+# Configures Guardian
+config :guardian, Guardian,
+  issuer: "SimplePay",
+  ttl: {30, :days},
+  hooks: GuardianDb,
+  verify_issuer: true,
+  secret_key: System.get_env("GUARDIAN_SECRET_KEY") || "thi$i$$up3r$3cr3t", # Please don't use this.
+  serializer: SimplePay.GuardianSerializer
+
+config :guardian_db, GuardianDb,
+  repo: SimplePay.Repo,
+  schema_name: "auth_tokens"
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{Mix.env}.exs"

@@ -1,0 +1,38 @@
+<%= form_for @changeset, @action, fn f -> %>
+  <%= if @changeset.action do %>
+    <div class="alert alert-danger">
+      <p>Oops, something went wrong! Please check the errors below.</p>
+    </div>
+  <% end %>
+
+  <h3>All changes require you to enter your current password</h3>
+  <div class="form-group">
+    <%= label f, :password, class: "control-label" %>
+    <%= password_input f, :password, class: "form-control" %>
+    <%= error_tag f, :password %>
+  </div>
+
+  <h3>Change your Email</h3>
+  <div class="form-group">
+    <%= label f, :email, class: "control-label" %>
+    <%= text_input f, :email, class: "form-control" %>
+    <%= error_tag f, :email %>
+  </div>
+
+  <h3>Change your password.</h3>
+  <div class="form-group">
+    <%= label f, :new_password, class: "control-label" %>
+    <%= password_input f, :new_password, class: "form-control" %>
+    <%= error_tag f, :new_password %>
+  </div>
+
+  <div class="form-group">
+    <%= label f, :new_password_confirmation, class: "control-label" %>
+    <%= password_input f, :new_password_confirmation, class: "form-control" %>
+    <%= error_tag f, :new_password_confirmation %>
+  </div>
+
+  <div class="form-group">
+    <%= submit "Update Account", class: "btn btn-primary" %>
+  </div>
+<% end %>

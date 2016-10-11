@@ -1,0 +1,7 @@
+<h2>Wallet</h2>
+
+<strong>Balance: </strong><p>
+  $0.00
+</p>
+
+<%= link "Back", to: account_path(@conn, :show) %>

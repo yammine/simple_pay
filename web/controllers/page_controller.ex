@@ -4,4 +4,8 @@ defmodule SimplePay.PageController do
   def index(conn, _params) do
     render conn, "index.html"
   end
+
+  def protected_route(conn, _) do
+    render conn, "protected_route.html"
+  end
 end

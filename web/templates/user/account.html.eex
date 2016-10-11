@@ -1,0 +1,14 @@
+<h2>Account</h2>
+
+<ul>
+
+  <li>
+    <strong>Email:</strong>
+    <%= @user.email %>
+  </li>
+
+</ul>
+
+<%= link "Edit", to: account_path(@conn, :edit) %>
+ |
+<%= link "Back", to: "/" %>

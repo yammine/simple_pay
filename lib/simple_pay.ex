@@ -1,29 +1,24 @@
 defmodule SimplePay do
   use Application
 
-  # See http://elixir-lang.org/docs/stable/elixir/Application.html
-  # for more information on OTP Applications
+  @event_store SimplePay.EventStore
+
   def start(_type, _args) do
     import Supervisor.Spec
 
-    # Define workers and child supervisors to be supervised
     children = [
       # Start the Ecto repository
       supervisor(SimplePay.Repo, []),
-      # Start the endpoint when the application starts
+      # Start EventStore repo
+      worker(Extreme, [Application.get_env(:extreme, :event_store), [name: @event_store]]),
       supervisor(SimplePay.Endpoint, []),
-      # Start your own worker by calling: SimplePay.Worker.start_link(arg1, arg2, arg3)
-      # worker(SimplePay.Worker, [arg1, arg2, arg3]),
     ]
 
-    # See http://elixir-lang.org/docs/stable/elixir/Supervisor.html
-    # for other strategies and supported options
     opts = [strategy: :one_for_one, name: SimplePay.Supervisor]
     Supervisor.start_link(children, opts)
   end
 
-  # Tell Phoenix to update the endpoint configuration
-  # whenever the application is updated.
+  # Hot reloading
   def config_change(changed, _new, removed) do
     SimplePay.Endpoint.config_change(changed, removed)
     :ok

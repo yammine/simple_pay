@@ -41,3 +41,13 @@ config :simple_pay, SimplePay.Repo,
   database: System.get_env("DB_NAME") || "simple_pay_dev",
   hostname: System.get_env("DB_HOST") || "localhost",
   pool_size: 10
+
+# Configure EventStore
+config :extreme, :event_store,
+  db_type: :node,
+  host: System.get_env("ES_HOST") || "localhost",
+  port: System.get_env("ES_PORT") || 1113,
+  username: System.get_env("ES_USERNAME") || "admin",
+  password: System.get_env("ES_PASSWORD") || "changeit",
+  reconnect_delay: 2_000,
+  max_attempts: :infinity
