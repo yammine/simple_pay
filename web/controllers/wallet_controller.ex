@@ -10,4 +10,10 @@ defmodule SimplePay.WalletController do
       |> Repo.one
     render(conn, "show.html", wallet: wallet)
   end
+
+  def deposit(conn, %{amount: amount} = deposit_params) do
+    user = Guardian.Plug.current_resource(conn)
+    wallet = from(w in Wallet, where: w.user_id == ^user.id, limit: 1, preload: [:user])
+      |> Repo.one
+  end
 end

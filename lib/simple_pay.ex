@@ -12,6 +12,7 @@ defmodule SimplePay do
       # Start EventStore repo
       worker(Extreme, [Application.get_env(:extreme, :event_store), [name: @event_store]]),
       supervisor(SimplePay.Endpoint, []),
+      supervisor(SimplePay.Wallet.Supervisor, []),
     ]
 
     opts = [strategy: :one_for_one, name: SimplePay.Supervisor]

@@ -4,6 +4,8 @@ defmodule SimplePay.Repo.Migrations.CreateWallet do
   def change do
     create table(:wallets) do
       add :user_id, references(:users, on_delete: :nothing)
+      add :balance, :float, default: 0.0
+      add :last_event_processed, :integer, default: -1
 
       timestamps()
     end

@@ -19,7 +19,7 @@ defmodule SimplePay.Mixfile do
   def application do
     [mod: {SimplePay, []},
      applications: [:phoenix, :phoenix_pubsub, :phoenix_html, :cowboy, :logger, :gettext,
-                    :phoenix_ecto, :postgrex, :guardian_db, :extreme]]
+                    :phoenix_ecto, :postgrex, :guardian_db, :extreme, :gproc]]
   end
 
   # Specifies which paths to compile per environment.
@@ -42,7 +42,8 @@ defmodule SimplePay.Mixfile do
       {:guardian, "~> 0.13.0"},
       {:guardian_db, "~> 0.7.0"},
       {:comeonin, "~> 2.5"},
-      {:extreme, "~> 0.6.1"}
+      {:extreme, "~> 0.6.1"},
+      {:gproc, "~> 0.5.0"}
     ]
   end
 
