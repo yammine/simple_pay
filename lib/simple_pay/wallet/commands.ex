@@ -4,15 +4,24 @@ defmodule SimplePay.Wallet.Commands do
   require Logger
 
   def attempt_command(command) do
-    find_wallet(command.id) |> command(command)
+    find_wallet(command.id) |> command(command, 5)
   end
 
   defp command(_, _, 0), do: {:error, "Unexpected error occurred."}
 
-  defp command(pid, %DepositMoney{amount: amount} = command, retries_left \\ 5) when is_float(amount) do
+  defp command(pid, %DepositMoney{amount: amount} = command, retries_left) when is_float(amount) do
     case Aggregate.deposit(pid, amount) do
       {:ok, _} ->
         Logger.info("Deposited $#{amount}")
+      {:error, _reason, _} ->
+        command(pid, command, retries_left-1)
+    end
+  end
+
+  defp command(pid, %WithdrawMoney{amount: amount} = command, retries_left) when is_float(amount) do
+    case Aggregate.withdraw(pid, amount) do
+      {:ok, _} ->
+        Logger.info("Attempted withdraw")
       {:error, _reason, _} ->
         command(pid, command, retries_left-1)
     end

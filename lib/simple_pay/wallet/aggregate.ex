@@ -3,7 +3,7 @@ defmodule SimplePay.Wallet.Aggregate do
   import Ecto.Query
 
   alias SimplePay.{Wallet, Repo, Utilities}
-  alias Events.{WalletCreated, MoneyDeposited, MoneyWithdrawn}
+  alias Events.{WalletCreated, MoneyDeposited, MoneyWithdrawn, WithdrawDeclined}
 
   @default_state %{ event_store: SimplePay.EventStore, stream: nil, last_event: nil, balance: nil,
                     subscription_ref: nil, id: nil }
@@ -31,7 +31,7 @@ defmodule SimplePay.Wallet.Aggregate do
   #       API      #
   ##################
 
-  def withdraw(pid, amount), do: GenServer.cast(pid, {:attempt_command, {:withdraw, amount}})
+  def withdraw(pid, amount), do: GenServer.call(pid, {:attempt_command, {:withdraw, amount}})
   def deposit(pid, amount), do: GenServer.call(pid, {:attempt_command, {:deposit, amount}})
 
   ##################
@@ -51,6 +51,17 @@ defmodule SimplePay.Wallet.Aggregate do
     {:reply, write_event(event, state), state}
   end
 
+  def handle_call({:attempt_command, {:withdraw, amount}}, _from, state) do
+    new_balance = state.balance - amount
+    event = case new_balance < 0.0 do
+      false ->
+        %{%MoneyWithdrawn{} | id: state.id, amount: amount, transaction_date: DateTime.utc_now }
+      true ->
+        %{%WithdrawDeclined{} | id: state.id, amount: amount, transaction_date: DateTime.utc_now}
+    end
+    {:reply, write_event(event, state, state.last_event), state}
+  end
+
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{subscription_ref: ref} = state) do
     GenServer.cast self, :subscribe
     {:noreply, %{state|subscription_ref: nil}}
@@ -63,8 +74,20 @@ defmodule SimplePay.Wallet.Aggregate do
         update_params = %{balance: state.balance + data.amount, last_event_processed: state.last_event + 1}
         wallet = Repo.get!(Wallet, state.id) |> Wallet.update_changeset(update_params) |> Repo.update!
         {:noreply, %{state | balance: wallet.balance, last_event: wallet.last_event_processed}}
+      "Elixir.Events.MoneyWithdrawn" ->
+        data = :erlang.binary_to_term(push.event.data)
+        update_params = %{balance: state.balance - data.amount, last_event_processed: state.last_event + 1}
+        wallet = Repo.get!(Wallet, state.id) |> Wallet.update_changeset(update_params) |> Repo.update!
+        {:noreply, %{state | balance: wallet.balance, last_event: wallet.last_event_processed}}
+      "Elixir.Events.WithdrawDeclined" ->
+        IO.puts "Withdraw declined yo"
+        update_params = %{last_event_processed: state.last_event + 1}
+        wallet = Repo.get!(Wallet, state.id) |> Wallet.update_changeset(update_params) |> Repo.update!
+        {:noreply, %{state | last_event: wallet.last_event_processed}}
       _ ->
-        {:noreply, state}
+        update_params = %{last_event_processed: state.last_event + 1}
+        wallet = Repo.get!(Wallet, state.id) |> Wallet.update_changeset(update_params) |> Repo.update!
+        {:noreply, %{state | last_event: wallet.last_event_processed}}
     end
   end
 
