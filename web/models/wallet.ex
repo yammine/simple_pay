@@ -8,7 +8,7 @@ defmodule SimplePay.Wallet do
     field :last_event_processed, :integer
     # It is important to use this only as a snapshot value,
     # the real balance of any wallet is whatever the WalletAggregate(for wallet with this id) says it is
-    field :balance, :float
+    field :balance, :integer # Smallest denomination of any currency (i.e. cents for CAD)
 
     timestamps()
   end
@@ -16,6 +16,7 @@ defmodule SimplePay.Wallet do
   @doc """
   Builds a changeset based on the `struct` and `params`.
   """
+  def empty_changeset(struct), do: struct |> change
   def changeset(struct, %User{} = user) do
     struct
     |> change

@@ -1,13 +1,18 @@
 defmodule SimplePay.Wallet.Aggregate do
   use GenServer
-  import Ecto.Query
+  require Logger
 
   alias SimplePay.{Wallet, Repo, Utilities}
+
+  alias Commands.{CreateWallet, DepositMoney, WithdrawMoney}
   alias Events.{WalletCreated, MoneyDeposited, MoneyWithdrawn, WithdrawDeclined}
 
   @default_state %{ event_store: SimplePay.EventStore, stream: nil, last_event: nil, balance: nil,
                     subscription_ref: nil, id: nil }
   @timeout 60_000 # Default 60 second timeout
+
+  @stream_doesnt_exist -1
+  @stream_should_exist -4
 
   ##################
   # Initialization #
@@ -31,8 +36,10 @@ defmodule SimplePay.Wallet.Aggregate do
   #       API      #
   ##################
 
-  def withdraw(pid, amount), do: GenServer.call(pid, {:attempt_command, {:withdraw, amount}})
-  def deposit(pid, amount), do: GenServer.call(pid, {:attempt_command, {:deposit, amount}})
+  def apply(pid, command) do
+    meta = %EventMetadata{event_id: Extreme.Tools.gen_uuid()}
+    GenServer.cast(pid, {:attempt_command, command, meta})
+  end
 
   ##################
   #    Callbacks   #
@@ -46,20 +53,58 @@ defmodule SimplePay.Wallet.Aggregate do
     {:noreply, %{state|subscription_ref: ref}}
   end
 
-  def handle_call({:attempt_command, {:deposit, amount}}, _from, state) do
-    event = %{%MoneyDeposited{} | id: state.id, amount: amount, transaction_date: DateTime.utc_now }
-    {:reply, write_event(event, state), state}
+  # Failed due to too many retries
+  def handle_cast({:attempt_command, command, %EventMetadata{retries: 0} = meta}, state) do
+    Logger.warn("Failed following command due to too many retries:\n metadata: #{inspect meta}\n #{inspect command}")
+    {:noreply, state}
   end
 
-  def handle_call({:attempt_command, {:withdraw, amount}}, _from, state) do
-    new_balance = state.balance - amount
-    event = case new_balance < 0.0 do
-      false ->
-        %{%MoneyWithdrawn{} | id: state.id, amount: amount, transaction_date: DateTime.utc_now }
-      true ->
-        %{%WithdrawDeclined{} | id: state.id, amount: amount, transaction_date: DateTime.utc_now}
+  def handle_cast({:attempt_command, %CreateWallet{id: id}, %EventMetadata{} = meta}, state) do
+    event = %{%WalletCreated{} | id: id, guid: meta.event_id}
+    case write_event(event, state, @stream_doesnt_exist) do
+      {:error, :WrongExpectedVersion, _} ->
+        Logger.warn("Attempted to create a Wallet with id: #{id} but it already exists.")
+      {:ok, _response} ->
+        Logger.info("Stream wallet-#{id} created.")
     end
-    {:reply, write_event(event, state, state.last_event), state}
+    {:noreply, state}
+  end
+
+  def handle_cast({:attempt_command, %DepositMoney{} = command, %EventMetadata{} = meta}, state) do
+    event = %{%MoneyDeposited{} | id: command.id, amount: command.amount,
+              transaction_date: DateTime.utc_now, guid: meta.event_id}
+    case write_event(event, state) do
+      {:error, reason, protomsg} ->
+        # This shouldn't ever happen, but log it if it does then retry
+        Logger.error("Error occurred: #{reason} - #{inspect protomsg}")
+        retry_command(command, meta)
+      {:ok, _response} ->
+        # TODO: Answer this question:
+        # Should I create some sort of LoadTransaction record like we do for cards?
+        :ok
+    end
+    {:noreply, state}
+  end
+
+  def handle_cast({:attempt_command, %WithdrawMoney{} = command, %EventMetadata{} = meta}, state) do
+    new_balance = state.balance - command.amount
+    event = case new_balance < 0 do
+      true ->
+        %WithdrawDeclined{id: command.id, amount: command.amount,
+                          transaction_date: DateTime.utc_now, guid: meta.event_id}
+      false ->
+        %MoneyWithdrawn{id: command.id, amount: command.amount,
+                        transaction_date: DateTime.utc_now, guid: meta.event_id}
+    end
+
+    case write_event(event, state, state.last_event) do
+      {:error, _, _} ->
+        retry_command(command, meta)
+      {:ok, _response} ->
+        :ok
+    end
+
+    {:noreply, state}
   end
 
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{subscription_ref: ref} = state) do
@@ -80,7 +125,7 @@ defmodule SimplePay.Wallet.Aggregate do
         wallet = Repo.get!(Wallet, state.id) |> Wallet.update_changeset(update_params) |> Repo.update!
         {:noreply, %{state | balance: wallet.balance, last_event: wallet.last_event_processed}}
       "Elixir.Events.WithdrawDeclined" ->
-        IO.puts "Withdraw declined yo"
+        IO.puts "Withdraw declined - Balance: $#{state.balance / 100}"
         update_params = %{last_event_processed: state.last_event + 1}
         wallet = Repo.get!(Wallet, state.id) |> Wallet.update_changeset(update_params) |> Repo.update!
         {:noreply, %{state | last_event: wallet.last_event_processed}}
@@ -99,11 +144,11 @@ defmodule SimplePay.Wallet.Aggregate do
     Extreme.execute(state.event_store, Utilities.write_events(state.stream, [event], expected_version))
   end
 
-  defp update_state(event = %MoneyDeposited{}, state) do
-    %{state | balance: state.balance + event.amount}
-  end
-
   defp via_tuple(wallet) do
     {:via, :gproc, {:n, :l, {:wallet, wallet}}}
+  end
+
+  defp retry_command(command, meta) do
+    GenServer.cast(self, {:attempt_command, command, %{meta | retries: meta.retries - 1}})
   end
 end

@@ -2,6 +2,8 @@ defmodule SimplePay.UserController do
   use SimplePay.Web, :controller
 
   alias SimplePay.{User, Wallet}
+  alias SimplePay.Wallet.CommandHandler
+  alias Commands.CreateWallet
 
   def index(conn, _params) do
     users = Repo.all(User)
@@ -17,7 +19,8 @@ defmodule SimplePay.UserController do
     changeset = User.changeset(%User{}, user_params)
 
     with {:ok, user} <- Repo.insert(changeset),
-         {:ok, _wallet} <- Repo.insert(Wallet.changeset(%Wallet{}, user)) do
+         {:ok, wallet} <- Repo.insert(Wallet.changeset(%Wallet{}, user)),
+         :ok <- CommandHandler.attempt_command(%CreateWallet{id: wallet.id}) do
       conn
       |> put_flash(:info, "Signed up successfully.")
       |> redirect(to: session_path(conn, :new))

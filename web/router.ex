@@ -48,6 +48,7 @@ defmodule SimplePay.Router do
     resources "/users", UserController, only: [:show]
     resources "/account", UserController, only: [:show, :edit, :update, :delete], singleton: true, as: :account
     resources "/wallet", WalletController, only: [:show], singleton: true
+    post "/wallet/deposit", WalletController, :deposit, as: :deposit
 
     resources "/sessions", SessionController, only: [:delete], singleton: true
   end

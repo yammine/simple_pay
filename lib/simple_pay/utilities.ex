@@ -4,7 +4,7 @@ defmodule SimplePay.Utilities do
   def write_events(stream, events, expected_version) do
     proto_events = Enum.map(events, fn event ->
       ExMsg.NewEvent.new(
-        event_id: Extreme.Tools.gen_uuid(),
+        event_id: event.guid,
         event_type: to_string(event.__struct__),
         data_content_type: 0,
         metadata_content_type: 0,
