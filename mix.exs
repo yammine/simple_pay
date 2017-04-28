@@ -43,7 +43,8 @@ defmodule SimplePay.Mixfile do
       {:guardian_db, "~> 0.7.0"},
       {:comeonin, "~> 2.5"},
       {:extreme, "~> 0.6.1"},
-      {:gproc, "~> 0.5.0"}
+      {:gproc, "~> 0.5.0"},
+      {:uuid, ">= 0.0.0"}
     ]
   end
 

@@ -18,7 +18,6 @@ defmodule SimplePay.WalletController do
     user = Guardian.Plug.current_resource(conn)
     wallet = from(w in Wallet, where: w.user_id == ^user.id, limit: 1, preload: [:user])
       |> Repo.one
-    changeset = Wallet.empty_changeset(wallet)
 
     int_amount = case Integer.parse(amount) do
       {amt, _} -> amt
@@ -28,7 +27,7 @@ defmodule SimplePay.WalletController do
     case CommandHandler.attempt_command(%DepositMoney{id: wallet.id, amount: int_amount}) do
       :ok ->
         conn
-        |> put_flash(:info, "Deposit recieved! Your balance will be updated shortly.")
+        |> put_flash(:info, "We have received your deposit and are now processing.")
         |> redirect(to: wallet_path(conn, :show))
       {:error, message} ->
         conn

@@ -9,7 +9,7 @@ defmodule SimplePay.Wallet.Aggregate do
 
   @default_state %{ event_store: SimplePay.EventStore, stream: nil, last_event: nil, balance: nil,
                     subscription_ref: nil, id: nil }
-  @timeout 60_000 # Default 60 second timeout
+  @timeout 60_000 # Default 60 second timeout TODO: Actually kill this genserver after @timeout of inactivity.
 
   @stream_doesnt_exist -1
   @stream_should_exist -4
@@ -24,12 +24,15 @@ defmodule SimplePay.Wallet.Aggregate do
 
   def init(wallet_id) do
     stream = "wallet-" <> to_string(wallet_id)
-    %Wallet{last_event_processed: last_event, balance: balance} = wallet = Repo.get!(Wallet, wallet_id) # Catastrophic failure if this doesn't match
+    case Repo.get(Wallet, wallet_id) do
+      %Wallet{last_event_processed: last_event, balance: balance} = wallet ->
+        state = %{@default_state | stream: stream, last_event: last_event, balance: balance, id: wallet.id}
+        GenServer.cast(self, :subscribe)
 
-    state = %{@default_state | stream: stream, last_event: last_event, balance: balance, id: wallet.id}
-    GenServer.cast(self, :subscribe)
-
-    {:ok, state}
+        {:ok, state}
+      nil ->
+        :ignore
+    end
   end
 
   ##################
@@ -37,7 +40,7 @@ defmodule SimplePay.Wallet.Aggregate do
   ##################
 
   def apply(pid, command) do
-    meta = %EventMetadata{event_id: Extreme.Tools.gen_uuid()}
+    meta = %EventMetadata{event_id: Extreme.Tools.gen_uuid}
     GenServer.cast(pid, {:attempt_command, command, meta})
   end
 
@@ -73,9 +76,9 @@ defmodule SimplePay.Wallet.Aggregate do
   def handle_cast({:attempt_command, %DepositMoney{} = command, %EventMetadata{} = meta}, state) do
     event = %{%MoneyDeposited{} | id: command.id, amount: command.amount,
               transaction_date: DateTime.utc_now, guid: meta.event_id}
-    case write_event(event, state) do
+    case write_event(event, state, @stream_should_exist) do
       {:error, reason, protomsg} ->
-        # This shouldn't ever happen, but log it if it does then retry
+        # This should only happen if someone tries to Deposit on a stream that doesn't exist.
         Logger.error("Error occurred: #{reason} - #{inspect protomsg}")
         retry_command(command, meta)
       {:ok, _response} ->
@@ -113,14 +116,13 @@ defmodule SimplePay.Wallet.Aggregate do
   end
 
   def handle_info({:on_event, push}, state) do
+    data = :erlang.binary_to_term(push.event.data)
     case push.event.event_type do
       "Elixir.Events.MoneyDeposited" ->
-        data = :erlang.binary_to_term(push.event.data)
         update_params = %{balance: state.balance + data.amount, last_event_processed: state.last_event + 1}
         wallet = Repo.get!(Wallet, state.id) |> Wallet.update_changeset(update_params) |> Repo.update!
         {:noreply, %{state | balance: wallet.balance, last_event: wallet.last_event_processed}}
       "Elixir.Events.MoneyWithdrawn" ->
-        data = :erlang.binary_to_term(push.event.data)
         update_params = %{balance: state.balance - data.amount, last_event_processed: state.last_event + 1}
         wallet = Repo.get!(Wallet, state.id) |> Wallet.update_changeset(update_params) |> Repo.update!
         {:noreply, %{state | balance: wallet.balance, last_event: wallet.last_event_processed}}
